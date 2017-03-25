@@ -31,7 +31,7 @@
 enum MsgTypes{
     JOINREQ,
     JOINREP,
-    DUMMYLASTMSGTYPE
+    UPDATE
 };
 
 /**
@@ -62,6 +62,9 @@ public:
 		return memberNode;
 	}
 	int recvLoop();
+	bool isCoordinator();	
+	bool isJoinRequest (char *, int);
+	void sendJoinMessge (Address *, enum MsgTypes);
 	static int enqueueWrapper(void *env, char *buff, int size);
 	void nodeStart(char *servaddrstr, short serverport);
 	int initThisNode(Address *joinaddr);

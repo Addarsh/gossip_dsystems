@@ -112,17 +112,40 @@ int MP1Node::initThisNode(Address *joinaddr) {
     return 0;
 }
 
+/* Send either JOINREQ or JOINREP message according
+   to the message type argument */
+void MP1Node::sendJoinMessge (Address *dest, enum MsgTypes mtype){
+	#ifdef DEBUGLOG
+    static char s[1024];
+	#endif
+	
+	size_t msgsize = sizeof(MessageHdr) + sizeof(dest->addr) + sizeof(long) + 1;
+	MessageHdr *msg = (MessageHdr *) malloc(msgsize * sizeof(char));
+
+	// create JOINREQ message: format of data is {struct Address myaddr}
+	msg->msgType = mtype;
+	memcpy((char *)(msg+1), &memberNode->addr.addr, sizeof(memberNode->addr.addr));
+	memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
+
+	#ifdef DEBUGLOG
+	if (mtype == JOINREQ){
+		sprintf(s, "Trying to join...");
+		log->LOG(&memberNode->addr, s);
+	}
+	#endif
+
+	// send JOINREQ or JOINGREP message to another member
+	emulNet->ENsend(&memberNode->addr, dest, (char *)msg, msgsize);
+
+  free(msg);
+}
+
 /**
  * FUNCTION NAME: introduceSelfToGroup
  *
  * DESCRIPTION: Join the distributed system
  */
 int MP1Node::introduceSelfToGroup(Address *joinaddr) {
-	MessageHdr *msg;
-#ifdef DEBUGLOG
-    static char s[1024];
-#endif
-
     if ( 0 == memcmp((char *)&(memberNode->addr.addr), (char *)&(joinaddr->addr), sizeof(memberNode->addr.addr))) {
         // I am the group booter (first process to join the group). Boot up the group
 #ifdef DEBUGLOG
@@ -131,27 +154,9 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
         memberNode->inGroup = true;
     }
     else {
-        size_t msgsize = sizeof(MessageHdr) + sizeof(joinaddr->addr) + sizeof(long) + 1;
-        msg = (MessageHdr *) malloc(msgsize * sizeof(char));
-
-        // create JOINREQ message: format of data is {struct Address myaddr}
-        msg->msgType = JOINREQ;
-        memcpy((char *)(msg+1), &memberNode->addr.addr, sizeof(memberNode->addr.addr));
-        memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
-
-#ifdef DEBUGLOG
-        sprintf(s, "Trying to join...");
-        log->LOG(&memberNode->addr, s);
-#endif
-
-        // send JOINREQ message to introducer member
-        emulNet->ENsend(&memberNode->addr, joinaddr, (char *)msg, msgsize);
-
-        free(msg);
-    }
-
+			sendJoinMessge (joinaddr, JOINREQ);
+		}
     return 1;
-
 }
 
 /**
@@ -174,9 +179,9 @@ int MP1Node::finishUpThisNode(){
 void MP1Node::nodeLoop() {
     if (memberNode->bFailed) {
     	return;
-    }
+    }	
 
-    // Check my messages
+		// Check my messages
     checkMessages();
 
     // Wait until you're in the group...
@@ -209,15 +214,43 @@ void MP1Node::checkMessages() {
     return;
 }
 
+/* Returns true if the given member is
+   the coordinator node and false otherwise */
+bool MP1Node::isCoordinator(){
+	char* addr = memberNode->addr.addr;
+	int id = *((int *)addr);
+	short port = *((short *) (&addr[4]));
+	return (id == 1 && port == 0);
+}
+
+/* Returns true if the given message is a JOINREQ
+   and false otherwise */
+bool MP1Node::isJoinRequest (char *data, int size){
+	int msgsize = sizeof(MessageHdr) + 6*sizeof(char) + sizeof(long) + 1;
+	if (size < msgsize)
+		return false;
+
+	MessageHdr *jdata = (MessageHdr *)data;
+	if (jdata->msgType != JOINREQ)
+		return false;
+
+	return true;	
+}
+
 /**
  * FUNCTION NAME: recvCallBack
  *
  * DESCRIPTION: Message handler for different message types
  */
 bool MP1Node::recvCallBack(void *env, char *data, int size ) {
-	/*
-	 * Your code goes here
-	 */
+	if (isCoordinator() && isJoinRequest (data, size)){
+		/* Send a JOINREP message to the sender*/
+		Address dest;
+		char *daddr = (char*)((MessageHdr *)data + 1);
+		memcpy (dest.addr, daddr, 6*sizeof (char));
+		sendJoinMessge (&dest, JOINREP);
+	}
+	return true;
 }
 
 /**
