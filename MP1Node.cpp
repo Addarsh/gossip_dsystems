@@ -7,6 +7,8 @@
 
 #include "MP1Node.h"
 
+#define GOSSIP_B 2
+
 /*
  * Note: You can change/add any functions in MP1Node.{h,cpp}
  */
@@ -96,8 +98,10 @@ int MP1Node::initThisNode(Address *joinaddr) {
 	/*
 	 * This function is partially implemented and may require changes
 	 */
-	int id = *(int*)(&memberNode->addr.addr);
-	int port = *(short*)(&memberNode->addr.addr[4]);
+	
+	/*TODO: are these lines needed?*/
+	//int id = *(int*)(&memberNode->addr.addr);
+	//int port = *(short*)(&memberNode->addr.addr[4]);
 
 	memberNode->bFailed = false;
 	memberNode->inited = true;
@@ -164,10 +168,15 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
  *
  * DESCRIPTION: Wind up this node and clean up state
  */
-int MP1Node::finishUpThisNode(){
-   /*
-    * Your code goes here
-    */
+int MP1Node::finishUpThisNode(){	
+	/* Free all elements in the recv queue */	
+  while ( !memberNode->mp1q.empty() ) {
+		void *ptr = memberNode->mp1q.front().elt;
+    memberNode->mp1q.pop();
+		free(ptr);
+	}
+
+	return 1;
 }
 
 /**
@@ -210,7 +219,8 @@ void MP1Node::checkMessages() {
     	size = memberNode->mp1q.front().size;
     	memberNode->mp1q.pop();
     	recvCallBack((void *)memberNode, (char *)ptr, size);
-    }
+    	free (ptr); /*TODO: confirm ptr to be freed */
+		}
     return;
 }
 
@@ -223,19 +233,48 @@ bool MP1Node::isCoordinator(){
 	return (id == 1 && port == 0);
 }
 
-/* Returns true if the given message is a JOINREQ
-   and false otherwise */
-bool MP1Node::isJoinRequest (char *data, int size){
-	int msgsize = sizeof(MessageHdr) + 6*sizeof(char) + sizeof(long) + 1;
-	if (size < msgsize)
-		return false;
-
+/* Returns type of message contained in the data */
+enum MsgTypes MP1Node::getDataType (char *data, int size){
+	assert (size >= (int)(sizeof (MessageHdr)));	
 	MessageHdr *jdata = (MessageHdr *)data;
-	if (jdata->msgType != JOINREQ)
-		return false;
-
-	return true;	
+	
+	return jdata->msgType;
 }
+
+/* Update membership list of member node 
+   according to given data */
+void MP1Node::updateMemberShip (char *data, int size){	
+	MessageHdr *mhdr = (MessageHdr *)data;
+	char *addr = (char*)(mhdr+1);
+	/*Pointer to member list table of sender*/
+	vector<MemberListEntry> *v = (vector<MemberListEntry> *)addr;
+	vector<MemberListEntry>::iterator it;
+	vector<MemberListEntry>::iterator myit;
+	
+	for(it = v->begin(); it != v->end(); it++){
+		for (myit = memberNode->memberList.begin(); myit != memberNode->memberList.end (); myit++){
+			if ((myit->getid() == it->getid()) && (myit->getport() == it->getport())){
+				if (it->getheartbeat () > myit->getheartbeat ()){
+					/* Address has been matched, update heartbeat
+						 and time stamp fields */
+					myit->setheartbeat (it->getheartbeat ());
+					myit->settimestamp (it->gettimestamp ());
+				}
+			}else{
+				/* New entry, add to my list */
+				memberNode->memberList.push_back (*it);
+				Address newaddr;
+				int id = it->getid();
+				short port = it->getport();
+				memcpy (newaddr.addr, &id, sizeof(int));
+				memcpy (&newaddr.addr[4], &port, sizeof(port));
+				log->logNodeAdd(&memberNode->addr, &newaddr);
+
+			}
+		}
+	}	
+}
+
 
 /**
  * FUNCTION NAME: recvCallBack
@@ -243,14 +282,119 @@ bool MP1Node::isJoinRequest (char *data, int size){
  * DESCRIPTION: Message handler for different message types
  */
 bool MP1Node::recvCallBack(void *env, char *data, int size ) {
-	if (isCoordinator() && isJoinRequest (data, size)){
-		/* Send a JOINREP message to the sender*/
-		Address dest;
-		char *daddr = (char*)((MessageHdr *)data + 1);
-		memcpy (dest.addr, daddr, 6*sizeof (char));
-		sendJoinMessge (&dest, JOINREP);
+	bool res = false;
+	switch (getDataType(data, size))
+		{
+			case JOINREQ:
+				if (isCoordinator()){ /* Send JOINREP response */
+						Address dest;
+						char *daddr = (char*)((MessageHdr *)data + 1);
+						memcpy (dest.addr, daddr, 6*sizeof (char));
+						sendJoinMessge (&dest, JOINREP);
+						res = true;
+					}
+				break;
+			case JOINREP:
+				if (!isCoordinator ()){ /* Add to group */
+						memberNode->inGroup = true;	
+						/* Create new Member list entry for self*/
+						MemberListEntry entry;
+						entry.setid (*(int*)(memberNode->addr.addr));
+						entry.setport (*(short*)(memberNode->addr.addr));
+						
+						memberNode->memberList.push_back (entry);
+						memberNode->myPos = memberNode->memberList.begin();
+						res = true;
+					}	
+				break;
+
+			case UPDATE:
+				updateMemberShip (data, size);
+				res = true;
+				break;
+			
+			default:
+				break;
+		}
+	
+	return res;
+}
+
+/* Remove timed out data in membership list if, any.
+   Note that timeout is after TREMOVE and TFAIL time period. */
+void MP1Node::removeOldMembers() {
+	
+	for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin(); it != memberNode->memberList.end (); it++){
+		long currtime = par->getcurrtime();
+		long lasttime = it->gettimestamp ();
+		if ((currtime - lasttime) >= (TREMOVE + TFAIL)){
+			//Remove from member list
+			vector<MemberListEntry>::iterator oldit = it;
+			it++;
+	
+			/* Log removal */
+			Address oldaddr;
+			int id = oldit->getid();
+			short port = oldit->getport();
+			memcpy (oldaddr.addr, &id, sizeof(int));
+			memcpy (&oldaddr.addr[4], &port, sizeof(short));
+			log->logNodeRemove(&memberNode->addr, &oldaddr);
+			
+			memberNode->memberList.erase(oldit);
+			continue;		
+		}	
 	}
-	return true;
+}
+
+/* Disseminate current membership 
+   to other nodes using gossip */
+void MP1Node::spreadGossip(){	
+
+	set<int> npos;
+	int listsz = memberNode->memberList.size(); 	
+
+	/* Find all neighbors to spread to */
+	int cnt = 0;
+	while (cnt < GOSSIP_B){
+		int r = rand() % (listsz-1) + 1;
+		if (npos.find(r) == npos.end()){
+			npos.insert(r);
+			cnt++;
+		}
+	}
+
+	/*Update heartbeart and time stamp of self*/
+	vector<MemberListEntry>::iterator mentry = memberNode->myPos;
+	mentry->setheartbeat(mentry->getheartbeat()+1);
+	mentry->settimestamp(par->getcurrtime());
+	
+	set<int>::iterator sit = npos.begin();
+	cnt = 0;
+	for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin(); it != memberNode->memberList.end(); it++,cnt++){
+		if (sit == npos.end())
+			break;
+		if (cnt == *sit){
+			/* Send membership list message to the peer */
+			int msgSize = sizeof(MessageHdr) + listsz*sizeof(MemberListEntry);
+			char *msg = (char*)malloc (msgSize);
+			((MessageHdr*)msg)->msgType = UPDATE;
+			char *data = (char*)((MessageHdr *)msg + 1);
+			memcpy (data, &memberNode->memberList, listsz*sizeof(MemberListEntry));
+
+			/* Create dest address */
+			Address dest;
+			int id = it->getid();
+			short port = it->getport();
+			memcpy(dest.addr,&id,sizeof(int));
+			memcpy(&dest.addr[4],&port,sizeof(short));
+			
+			emulNet->ENsend (&memberNode->addr, &dest, msg, msgSize);
+			
+			free (msg);
+			sit++;
+		}
+	}
+
 }
 
 /**
@@ -260,13 +404,10 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
  * 				the nodes
  * 				Propagate your membership list
  */
-void MP1Node::nodeLoopOps() {
+void MP1Node::nodeLoopOps() {	
+	removeOldMembers();
 
-	/*
-	 * Your code goes here
-	 */
-
-    return;
+	spreadGossip();
 }
 
 /**

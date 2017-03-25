@@ -63,8 +63,12 @@ public:
 	}
 	int recvLoop();
 	bool isCoordinator();	
-	bool isJoinRequest (char *, int);
+	enum MsgTypes getDataType (char *, int);
 	void sendJoinMessge (Address *, enum MsgTypes);
+	void updateMemberShip (char *, int);	
+	void removeOldMembers();
+	void spreadGossip();
+	
 	static int enqueueWrapper(void *env, char *buff, int size);
 	void nodeStart(char *servaddrstr, short serverport);
 	int initThisNode(Address *joinaddr);

@@ -106,9 +106,11 @@ public:
 	int timeOutCounter;
 	// Membership table
 	vector<MemberListEntry> memberList;
+
 	// My position in the membership table
 	vector<MemberListEntry>::iterator myPos;
-	// Queue for failure detection messages
+	
+// Queue for failure detection messages
 	queue<q_elt> mp1q;
 	/**
 	 * Constructor
