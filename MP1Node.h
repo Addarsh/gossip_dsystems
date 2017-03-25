@@ -68,6 +68,7 @@ public:
 	void updateMemberShip (char *, int);	
 	void removeOldMembers();
 	void spreadGossip();
+	void addSelfToMemberList ();
 	
 	static int enqueueWrapper(void *env, char *buff, int size);
 	void nodeStart(char *servaddrstr, short serverport);
