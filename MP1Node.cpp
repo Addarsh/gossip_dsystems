@@ -124,7 +124,7 @@ void MP1Node::sendJoinMessge (Address *dest, enum MsgTypes mtype){
 	#endif
 	
 	size_t msgsize = sizeof(MessageHdr) + sizeof(char)*6 + sizeof(long) + 1;
-	MessageHdr *msg = (MessageHdr *) malloc(msgsize * sizeof(char));
+	MessageHdr *msg = (MessageHdr *) malloc(msgsize);
 
 	// create JOINREQ message: format of data is {struct Address myaddr}
 	msg->msgType = mtype;
@@ -220,7 +220,7 @@ void MP1Node::checkMessages() {
     	size = memberNode->mp1q.front().size;
     	memberNode->mp1q.pop();
     	recvCallBack((void *)memberNode, (char *)ptr, size);
-    	//free (ptr); /*TODO: confirm ptr to be freed */
+    	free (ptr); /*TODO: confirm ptr to be freed */
 		}
     return;
 }
@@ -245,7 +245,6 @@ enum MsgTypes MP1Node::getDataType (char *data, int size){
 /* Update membership list of member node 
    according to given data */
 void MP1Node::updateMemberShip (char *data, int size){	
-	
 	MessageHdr *mhdr = (MessageHdr *)data;
 	MemberListEntry *mentry = (MemberListEntry *)(mhdr + 1); 	
 
@@ -262,6 +261,7 @@ void MP1Node::updateMemberShip (char *data, int size){
 						 and time stamp fields */
 					myit->setheartbeat (mentry[i].getheartbeat ());
 					myit->settimestamp (par->getcurrtime());
+					cout << "LOGGING time: " << par->getcurrtime () << endl;
 				}
 				found = true;
 				break;
@@ -286,13 +286,13 @@ void MP1Node::updateMemberShip (char *data, int size){
 /* Add self node value to member list */
 void MP1Node::addSelfToMemberList (){
 	MemberListEntry entry;
-	entry.setid (*(int*)(memberNode->addr.addr));
-	entry.setport (*(short*)(memberNode->addr.addr));
+	char *addr = memberNode->addr.addr;
+	entry.setid (*(int*)(addr));
+	entry.setport (*(short*)(&addr[4]));
 	entry.setheartbeat (0);
 	entry.settimestamp (par->getcurrtime());		
 
 	memberNode->memberList.push_back (entry);
-	memberNode->myPos = memberNode->memberList.begin();
 }
 
 
@@ -351,7 +351,7 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
    Note that timeout is after TREMOVE and TFAIL time period. */
 void MP1Node::removeOldMembers() {
 	
-	for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin(); it != memberNode->memberList.end (); it++){
+	for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin()+1; it != memberNode->memberList.end (); it++){
 		long currtime = par->getcurrtime();
 		long lasttime = it->gettimestamp ();
 		if ((currtime - lasttime) >= (TREMOVE + TFAIL)){
@@ -381,18 +381,21 @@ void MP1Node::spreadGossip(){
 	if (listsz <= 1)
 		return;
 
+	cout << "from: " << memberNode->addr.getAddress() << " ,listsz: " << listsz << endl;
 	/* Find all neighbors to spread to */
 	int cnt = 0;
 	while (cnt < GOSSIP_B && cnt < (listsz-1)){
 		int r = rand() % (listsz-1) + 1;
 		if (npos.find(r) == npos.end()){
 			npos.insert(r);
+			cout << "	inserted: "<< r << endl;
 			cnt++;
 		}
 	}
 
 	/*Update heartbeart and time stamp of self*/
-	vector<MemberListEntry>::iterator mentry = memberNode->myPos;
+	cout << "		My addr is:  " << memberNode->memberList.begin()->getid() << endl;
+	vector<MemberListEntry>::iterator mentry = memberNode->memberList.begin();
 	mentry->setheartbeat(mentry->getheartbeat()+1);
 	mentry->settimestamp(par->getcurrtime());
 	
@@ -433,7 +436,7 @@ void MP1Node::spreadGossip(){
  * 				Propagate your membership list
  */
 void MP1Node::nodeLoopOps() {	
-	removeOldMembers();
+	//removeOldMembers();
 
 	spreadGossip();
 }
