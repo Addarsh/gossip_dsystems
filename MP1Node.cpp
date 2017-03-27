@@ -251,8 +251,9 @@ void MP1Node::updateMemberShip (char *data, int size){
 	bool found = false;	
 	for(int i = 0; i < numelems; i++){
 		for (myit = memberNode->memberList.begin(); myit != memberNode->memberList.end (); myit++){
+			long difftime = par->getcurrtime() - myit->gettimestamp();
 			if ((myit->getid() == mentry[i].getid()) &&	(myit->getport() == mentry[i].getport())){
-				if (mentry[i].getheartbeat() > myit->getheartbeat()){	
+				if ((difftime < TFAIL) && (mentry[i].getheartbeat() > myit->getheartbeat())){	
 					/* Address has been matched, update heartbeat
 						 and time stamp fields */
 					myit->setheartbeat (mentry[i].getheartbeat ());
@@ -352,8 +353,9 @@ void MP1Node::removeOldMembers() {
 	while (it != memberNode->memberList.end ()){
 		long currtime = par->getcurrtime();
 		long lasttime = it->gettimestamp ();
-		if ((currtime - lasttime) >= (TREMOVE + TFAIL)){
-			//Remove from member list
+		long difftime = currtime - lasttime;
+		if (difftime >= (TREMOVE + TFAIL)){
+			/*Remove from member list*/
 			vector<MemberListEntry>::iterator oldit = it;
 	
 			/* Log removal */
