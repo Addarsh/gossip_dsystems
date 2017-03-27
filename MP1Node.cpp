@@ -99,10 +99,6 @@ int MP1Node::initThisNode(Address *joinaddr) {
 	 * This function is partially implemented and may require changes
 	 */
 	
-	/*TODO: are these lines needed?*/
-	//int id = *(int*)(&memberNode->addr.addr);
-	//int port = *(short*)(&memberNode->addr.addr[4]);
-
 	memberNode->bFailed = false;
 	memberNode->inited = true;
 	memberNode->inGroup = false;
@@ -261,7 +257,6 @@ void MP1Node::updateMemberShip (char *data, int size){
 						 and time stamp fields */
 					myit->setheartbeat (mentry[i].getheartbeat ());
 					myit->settimestamp (par->getcurrtime());
-					cout << "LOGGING time: " << par->getcurrtime () << endl;
 				}
 				found = true;
 				break;
@@ -287,6 +282,8 @@ void MP1Node::updateMemberShip (char *data, int size){
 void MP1Node::addSelfToMemberList (){
 	MemberListEntry entry;
 	char *addr = memberNode->addr.addr;
+	memberNode->memberList.clear ();
+
 	entry.setid (*(int*)(addr));
 	entry.setport (*(short*)(&addr[4]));
 	entry.setheartbeat (0);
@@ -310,7 +307,6 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 						Address dest;
 						char *daddr = (char*)((MessageHdr *)data + 1);
 						memcpy (dest.addr, daddr, 6*sizeof (char));
-						cout << "Got JOINREQ from: " << dest.getAddress() << endl;
 						sendJoinMessge (&dest, JOINREP);
 						
 						/*Add to member list */
@@ -321,12 +317,13 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 						entry.settimestamp (par->getcurrtime());					
 	
 						memberNode->memberList.push_back (entry);
+
+						log->logNodeAdd(&memberNode->addr, &dest);
 						res = true;
 					}
 				break;
 			case JOINREP:
 				if (!isCoordinator ()){ /* Add to group */
-						cout << "Got JOINREP from coordinator. My addr: " << memberNode->addr.getAddress() << endl;
 						
 						memberNode->inGroup = true;	
 						/* Create new Member list entry for self*/
@@ -350,14 +347,14 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 /* Remove timed out data in membership list if, any.
    Note that timeout is after TREMOVE and TFAIL time period. */
 void MP1Node::removeOldMembers() {
-	
-	for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin()+1; it != memberNode->memberList.end (); it++){
+
+	vector<MemberListEntry>::iterator it = memberNode->memberList.begin() + 1;
+	while (it != memberNode->memberList.end ()){
 		long currtime = par->getcurrtime();
 		long lasttime = it->gettimestamp ();
 		if ((currtime - lasttime) >= (TREMOVE + TFAIL)){
 			//Remove from member list
 			vector<MemberListEntry>::iterator oldit = it;
-			it++;
 	
 			/* Log removal */
 			Address oldaddr;
@@ -367,9 +364,10 @@ void MP1Node::removeOldMembers() {
 			memcpy (&oldaddr.addr[4], &port, sizeof(short));
 			log->logNodeRemove(&memberNode->addr, &oldaddr);
 			
-			memberNode->memberList.erase(oldit);
+			it = memberNode->memberList.erase(oldit);
 			continue;		
 		}	
+		it++;
 	}
 }
 
@@ -381,20 +379,17 @@ void MP1Node::spreadGossip(){
 	if (listsz <= 1)
 		return;
 
-	cout << "from: " << memberNode->addr.getAddress() << " ,listsz: " << listsz << endl;
 	/* Find all neighbors to spread to */
 	int cnt = 0;
 	while (cnt < GOSSIP_B && cnt < (listsz-1)){
 		int r = rand() % (listsz-1) + 1;
 		if (npos.find(r) == npos.end()){
 			npos.insert(r);
-			cout << "	inserted: "<< r << endl;
 			cnt++;
 		}
 	}
 
 	/*Update heartbeart and time stamp of self*/
-	cout << "		My addr is:  " << memberNode->memberList.begin()->getid() << endl;
 	vector<MemberListEntry>::iterator mentry = memberNode->memberList.begin();
 	mentry->setheartbeat(mentry->getheartbeat()+1);
 	mentry->settimestamp(par->getcurrtime());
@@ -436,7 +431,7 @@ void MP1Node::spreadGossip(){
  * 				Propagate your membership list
  */
 void MP1Node::nodeLoopOps() {	
-	//removeOldMembers();
+	removeOldMembers();
 
 	spreadGossip();
 }
