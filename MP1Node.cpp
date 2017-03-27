@@ -251,9 +251,8 @@ void MP1Node::updateMemberShip (char *data, int size){
 	bool found = false;	
 	for(int i = 0; i < numelems; i++){
 		for (myit = memberNode->memberList.begin(); myit != memberNode->memberList.end (); myit++){
-			long difftime = par->getcurrtime() - myit->gettimestamp();
 			if ((myit->getid() == mentry[i].getid()) &&	(myit->getport() == mentry[i].getport())){
-				if ((difftime < TFAIL) && (mentry[i].getheartbeat() > myit->getheartbeat())){	
+				if ((myit->getheartbeat() != -1) && (mentry[i].getheartbeat() > myit->getheartbeat())){	
 					/* Address has been matched, update heartbeat
 						 and time stamp fields */
 					myit->setheartbeat (mentry[i].getheartbeat ());
@@ -357,17 +356,18 @@ void MP1Node::removeOldMembers() {
 		if (difftime >= (TREMOVE + TFAIL)){
 			/*Remove from member list*/
 			vector<MemberListEntry>::iterator oldit = it;
-	
-			/* Log removal */
-			Address oldaddr;
-			int id = oldit->getid();
-			short port = oldit->getport();
-			memcpy (oldaddr.addr, &id, sizeof(int));
-			memcpy (&oldaddr.addr[4], &port, sizeof(short));
-			log->logNodeRemove(&memberNode->addr, &oldaddr);
-			
 			it = memberNode->memberList.erase(oldit);
 			continue;		
+		}else if (difftime >= TREMOVE){
+			/* Remove and log it*/
+			Address oldaddr;
+			int id = it->getid();
+			short port = it->getport();
+			memcpy (oldaddr.addr, &id, sizeof(int));
+			memcpy (&oldaddr.addr[4], &port, sizeof(short));
+					
+			it->setheartbeat (-1);
+			log->logNodeRemove(&memberNode->addr, &oldaddr);
 		}	
 		it++;
 	}
@@ -401,7 +401,7 @@ void MP1Node::spreadGossip(){
 	for(vector<MemberListEntry>::iterator it = memberNode->memberList.begin() + 1; it != memberNode->memberList.end(); it++){
 		if (setit == npos.end())
 			break;
-		if (cnt == *setit){
+		if ((it->getheartbeat () != -1) && (cnt == *setit)){
 			/* Send membership list message to the peer */
 			int msgSize = sizeof(MessageHdr) + listsz*sizeof(MemberListEntry);
 			char *msg = (char*) malloc (msgSize);
