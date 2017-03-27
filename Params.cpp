@@ -43,7 +43,7 @@ void Params::setparams(char *config_file) {
  * FUNCTION NAME: getcurrtime
  *
  * DESCRIPTION: Return time since start of program, in time units.
- * 				For a 'real' implementation, this return time would be the UTC time.
+ *				For a 'real' implementation, this return time would be the UTC time.
  */
 int Params::getcurrtime(){
     return globaltime;

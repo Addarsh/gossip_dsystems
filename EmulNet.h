@@ -77,7 +77,7 @@ public:
  * DESCRIPTION: This class defines an emulated network
  */
 class EmulNet
-{ 	
+{		
 private:
 	Params* par;
 	int sent_msgs[MAX_NODES + 1][MAX_TIME];
@@ -85,10 +85,10 @@ private:
 	int enInited;
 	EM emulnet;
 public:
- 	EmulNet(Params *p);
- 	EmulNet(EmulNet &anotherEmulNet);
- 	EmulNet& operator = (EmulNet &anotherEmulNet);
- 	virtual ~EmulNet();
+	EmulNet(Params *p);
+	EmulNet(EmulNet &anotherEmulNet);
+	EmulNet& operator = (EmulNet &anotherEmulNet);
+	virtual ~EmulNet();
 	void *ENinit(Address *myaddr, short port);
 	int ENsend(Address *myaddr, Address *toaddr, string data);
 	int ENsend(Address *myaddr, Address *toaddr, char *data, int size);

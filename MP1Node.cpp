@@ -2,7 +2,7 @@
  * FILE NAME: MP1Node.cpp
  *
  * DESCRIPTION: Membership protocol run by this Node.
- * 				Definition of MP1Node class functions.
+ *				Definition of MP1Node class functions.
  **********************************/
 
 #include "MP1Node.h"
@@ -38,14 +38,14 @@ MP1Node::~MP1Node() {}
  * FUNCTION NAME: recvLoop
  *
  * DESCRIPTION: This function receives message from the network and pushes into the queue
- * 				This function is called by a node to receive messages currently waiting for it
+ *				This function is called by a node to receive messages currently waiting for it
  */
 int MP1Node::recvLoop() {
     if ( memberNode->bFailed ) {
-    	return false;
+			return false;
     }
     else {
-    	return emulNet->ENrecv(&(memberNode->addr), enqueueWrapper, NULL, 1, &(memberNode->mp1q));
+			return emulNet->ENrecv(&(memberNode->addr), enqueueWrapper, NULL, 1, &(memberNode->mp1q));
     }
 }
 
@@ -63,8 +63,8 @@ int MP1Node::enqueueWrapper(void *env, char *buff, int size) {
  * FUNCTION NAME: nodeStart
  *
  * DESCRIPTION: This function bootstraps the node
- * 				All initializations routines for a member.
- * 				Called by the application layer.
+ *				All initializations routines for a member.
+ *				Called by the application layer.
  */
 void MP1Node::nodeStart(char *servaddrstr, short servport) {
     Address joinaddr;
@@ -153,9 +153,8 @@ int MP1Node::introduceSelfToGroup(Address *joinaddr) {
 		memberNode->inGroup = true;
 		addSelfToMemberList ();
 	}
-	else {
+	else
 		sendJoinMessge (joinaddr, JOINREQ);
-	}
 					
 	return 1;
 }
@@ -172,6 +171,7 @@ int MP1Node::finishUpThisNode(){
     memberNode->mp1q.pop();
 		free(ptr);
 	}
+	delete memberNode;
 
 	return 1;
 }
@@ -180,19 +180,19 @@ int MP1Node::finishUpThisNode(){
  * FUNCTION NAME: nodeLoop
  *
  * DESCRIPTION: Executed periodically at each member
- * 				Check your messages in queue and perform membership protocol duties
+ *				Check your messages in queue and perform membership protocol duties
  */
 void MP1Node::nodeLoop() {
     if (memberNode->bFailed) {
-    	return;
+			return;
     }	
 
-		// Check my messages
+		/* Check received messages */
     checkMessages();
 
     // Wait until you're in the group...
     if( !memberNode->inGroup ) {
-    	return;
+			return;
     }
 
     // ...then jump in and share your responsibilites!
@@ -212,11 +212,11 @@ void MP1Node::checkMessages() {
 
     // Pop waiting messages from memberNode's mp1q
     while ( !memberNode->mp1q.empty() ) {
-    	ptr = memberNode->mp1q.front().elt;
-    	size = memberNode->mp1q.front().size;
-    	memberNode->mp1q.pop();
-    	recvCallBack((void *)memberNode, (char *)ptr, size);
-    	free (ptr); /*TODO: confirm ptr to be freed */
+			ptr = memberNode->mp1q.front().elt;
+			size = memberNode->mp1q.front().size;
+			memberNode->mp1q.pop();
+			recvCallBack((void *)memberNode, (char *)ptr, size);
+			free (ptr);
 		}
     return;
 }
@@ -242,7 +242,7 @@ enum MsgTypes MP1Node::getDataType (char *data, int size){
    according to given data */
 void MP1Node::updateMemberShip (char *data, int size){	
 	MessageHdr *mhdr = (MessageHdr *)data;
-	MemberListEntry *mentry = (MemberListEntry *)(mhdr + 1); 	
+	MemberListEntry *mentry = (MemberListEntry *)(mhdr + 1);	
 
 	/*Pointer to member list table of sender*/
 	vector<MemberListEntry>::iterator myit;
@@ -358,7 +358,7 @@ void MP1Node::removeOldMembers() {
 			vector<MemberListEntry>::iterator oldit = it;
 			it = memberNode->memberList.erase(oldit);
 			continue;		
-		}else if (difftime >= TREMOVE){
+		}else if (difftime == TREMOVE){
 			/* Remove and log it*/
 			Address oldaddr;
 			int id = it->getid();
@@ -377,7 +377,7 @@ void MP1Node::removeOldMembers() {
    to other nodes using gossip */
 void MP1Node::spreadGossip(){
 	set<int> npos;
-	int listsz = memberNode->memberList.size(); 	
+	int listsz = memberNode->memberList.size();		
 	if (listsz <= 1)
 		return;
 
@@ -429,8 +429,8 @@ void MP1Node::spreadGossip(){
  * FUNCTION NAME: nodeLoopOps
  *
  * DESCRIPTION: Check if any node hasn't responded within a timeout period and then delete
- * 				the nodes
- * 				Propagate your membership list
+ *				the nodes
+ *				Propagate your membership list
  */
 void MP1Node::nodeLoopOps() {	
 	removeOldMembers();
