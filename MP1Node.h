@@ -21,10 +21,6 @@
 #define TREMOVE 20
 #define TFAIL 5
 
-/*
- * Note: You can change/add any functions in MP1Node.{h,cpp}
- */
-
 /**
  * Message Types
  */
@@ -46,8 +42,8 @@ typedef struct MessageHdr {
 /**
  * CLASS NAME: MP1Node
  *
- * DESCRIPTION: Class implementing Membership protocol functionalities for failure detection
- */
+ * DESCRIPTION: Class implementing Membership protocol 
+ * functionalities for failure detection */
 class MP1Node {
 private:
 	EmulNet *emulNet;
